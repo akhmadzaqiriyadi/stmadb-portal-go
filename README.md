@@ -1,0 +1,1 @@
+# stmadb-portal-go
