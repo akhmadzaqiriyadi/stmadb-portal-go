@@ -1,0 +1,37 @@
+# File binary hasil kompilasi Go
+stmadb-portal-go
+
+# File environment yang berisi rahasia
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Folder dependensi Node.js yang mungkin dibuat oleh Prisma
+node_modules/
+
+# Log
+logs/
+*.log
+
+# Uploads (jika tidak ingin di-commit)
+uploads/*
+!uploads/.gitkeep
+
+# Direktori hasil build atau distribusi
+dist/
+build/
+
+# Laporan coverage test
+coverage/
+
+# File sistem operasi
+.DS_Store
+Thumbs.db
+
+# File IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
