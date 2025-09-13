@@ -21,41 +21,111 @@ func NewAuthService(db *db.PrismaClient) *AuthService {
 	return &AuthService{db: db}
 }
 
-// Login memvalidasi kredensial user dan mengembalikan token jika valid
-func (s *AuthService) Login(username, password string) (string, error) {
-	// 1. Cari user berdasarkan username
+// Definisikan tipe data baru untuk menampung kedua token
+type TokenPair struct {
+	AccessToken  string
+	RefreshToken string
+}
+
+// Login sekarang mengembalikan sepasang token
+func (s *AuthService) Login(username, password string) (*TokenPair, error) {
 	user, err := s.db.User.FindFirst(db.User.Username.Equals(username)).Exec(context.Background())
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return "", errors.New("invalid credentials")
+			return nil, errors.New("invalid credentials")
 		}
-		return "", err
+		return nil, err
 	}
 
-	// 2. Bandingkan password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return "", errors.New("invalid credentials") // Password tidak cocok
+		return nil, errors.New("invalid credentials")
 	}
 
-	// 3. Buat JWT Token
-	claims := jwt.MapClaims{
+	// Buat Access Token (Masa berlaku pendek, misal 15 menit)
+	accessClaims := jwt.MapClaims{
 		"userId":   user.ID,
 		"username": user.Username,
 		"role":     user.Role,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Token berlaku 24 jam
+		"exp":      time.Now().Add(time.Minute * 15).Unix(), // <-- Masa berlaku 15 menit
 	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	jwtSecret := viper.GetString("JWT_SECRET")
-	tokenString, err := token.SignedString([]byte(jwtSecret))
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessTokenString, err := accessToken.SignedString([]byte(viper.GetString("JWT_SECRET")))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return tokenString, nil
+	// Buat Refresh Token (Masa berlaku panjang, misal 7 hari)
+	refreshClaims := jwt.MapClaims{
+		"userId": user.ID,
+		"exp":    time.Now().Add(time.Hour * 24 * 7).Unix(), // <-- Masa berlaku 7 hari
+	}
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshTokenString, err := refreshToken.SignedString([]byte(viper.GetString("JWT_REFRESH_SECRET")))
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenPair{
+		AccessToken:  accessTokenString,
+		RefreshToken: refreshTokenString,
+	}, nil
 }
 
+// RefreshToken memvalidasi refresh token dan membuat sepasang token baru
+func (s *AuthService) RefreshToken(refreshTokenString string) (*TokenPair, error) {
+	token, err := jwt.Parse(refreshTokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(viper.GetString("JWT_REFRESH_SECRET")), nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, errors.New("invalid or expired refresh token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+
+	userIdFloat := claims["userId"].(float64)
+	userId := int(userIdFloat)
+
+	user, err := s.db.User.FindUnique(db.User.ID.Equals(db.BigInt(userId))).Exec(context.Background())
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+	
+	// Buat Access Token baru
+	accessClaims := jwt.MapClaims{
+		"userId":   user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+		"exp":      time.Now().Add(time.Minute * 15).Unix(),
+	}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessTokenString, err := accessToken.SignedString([]byte(viper.GetString("JWT_SECRET")))
+	if err != nil {
+		return nil, err
+	}
+
+	// Buat Refresh Token baru
+	refreshClaims := jwt.MapClaims{
+		"userId": user.ID,
+		"exp":    time.Now().Add(time.Hour * 24 * 7).Unix(),
+	}
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	newRefreshTokenString, err := refreshToken.SignedString([]byte(viper.GetString("JWT_REFRESH_SECRET")))
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenPair{
+		AccessToken:  accessTokenString,
+		RefreshToken: newRefreshTokenString,
+	}, nil
+}
+
+// GetProfile mengambil profil pengguna berdasarkan userID.
 func (s *AuthService) GetProfile(userID int) (*db.UserModel, error) {
 	user, err := s.db.User.FindUnique(
 		db.User.ID.Equals(db.BigInt(userID)),
@@ -74,4 +144,40 @@ func (s *AuthService) GetProfile(userID int) (*db.UserModel, error) {
 	}
 
 	return user, nil
+}
+
+// ChangePassword memvalidasi password lama dan menggantinya dengan yang baru.
+func (s *AuthService) ChangePassword(userID int, currentPassword, newPassword string) error {
+	// 1. Ambil data user dari database
+	user, err := s.db.User.FindUnique(
+		db.User.ID.Equals(db.BigInt(userID)),
+	).Exec(context.Background())
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	// 2. Bandingkan password saat ini
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword))
+	if err != nil {
+		return errors.New("current password is incorrect") // Password lama tidak cocok
+	}
+
+	// 3. Hash password baru
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("failed to hash new password")
+	}
+
+	// 4. Update password di database
+	_, err = s.db.User.FindUnique(
+		db.User.ID.Equals(db.BigInt(userID)),
+	).Update(
+		db.User.Password.Set(string(hashedNewPassword)),
+	).Exec(context.Background())
+	
+	if err != nil {
+		return errors.New("failed to update password")
+	}
+
+	return nil
 }

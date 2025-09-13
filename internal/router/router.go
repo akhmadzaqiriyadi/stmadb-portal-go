@@ -29,7 +29,9 @@ func SetupRouter(dbClient *db.PrismaClient) *gin.Engine {
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh", authHandler.RefreshToken) 
 			auth.GET("/profile", middleware.Authenticate(dbClient), authHandler.GetProfile)
+			auth.PUT("/change-password", middleware.Authenticate(dbClient), authHandler.ChangePassword)
 		}
 	}
 

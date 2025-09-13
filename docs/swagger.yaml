@@ -1,40 +1,56 @@
 basePath: /api/v1
 definitions:
+  handler.ChangePasswordRequest:
+    properties:
+      currentPassword:
+        example: old_password123
+        type: string
+      newPassword:
+        example: new_secure_password
+        minLength: 6
+        type: string
+    required:
+    - currentPassword
+    - newPassword
+    type: object
   handler.GenericResponse:
     properties:
-      data:
-        description: omitempty agar tidak tampil jika nil
+      data: {}
       message:
+        example: Operation successful
         type: string
       success:
+        example: true
         type: boolean
     type: object
   handler.LoginRequest:
     properties:
       password:
+        example: admin123
         type: string
       username:
+        example: admin
         type: string
     required:
     - password
     - username
     type: object
-  handler.LoginResponse:
-    properties:
-      accessToken:
-        type: string
-    type: object
   handler.ProfileData:
     properties:
       created_at:
+        example: "2025-09-13T12:00:00Z"
         type: string
       id:
+        example: 1
         type: integer
       is_active:
+        example: true
         type: boolean
       role:
+        example: admin
         type: string
       username:
+        example: admin
         type: string
     type: object
   handler.ProfileResponse:
@@ -42,9 +58,28 @@ definitions:
       data:
         $ref: '#/definitions/handler.ProfileData'
       message:
+        example: Profile retrieved successfully
         type: string
       success:
+        example: true
         type: boolean
+    type: object
+  handler.RefreshTokenRequest:
+    properties:
+      refreshToken:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    required:
+    - refreshToken
+    type: object
+  handler.TokenResponse:
+    properties:
+      accessToken:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      refreshToken:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
     type: object
 host: localhost:3000
 info:
@@ -53,11 +88,43 @@ info:
   title: STMADB Portal Backend API
   version: "1.0"
 paths:
+  /auth/change-password:
+    put:
+      consumes:
+      - application/json
+      description: Allows an authenticated user to change their password.
+      parameters:
+      - description: Current and new passwords
+        in: body
+        name: passwords
+        required: true
+        schema:
+          $ref: '#/definitions/handler.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password changed successfully
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+        "401":
+          description: Unauthorized or incorrect password
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Change user password
+      tags:
+      - Authentication
   /auth/login:
     post:
       consumes:
       - application/json
-      description: Authenticate a user and return a JWT token.
+      description: Authenticate a user and return a JWT token pair.
       parameters:
       - description: Login Credentials
         in: body
@@ -75,7 +142,7 @@ paths:
             - $ref: '#/definitions/handler.GenericResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/handler.LoginResponse'
+                  $ref: '#/definitions/handler.TokenResponse'
               type: object
         "400":
           description: Invalid Request
@@ -105,6 +172,37 @@ paths:
       security:
       - BearerAuth: []
       summary: Get user profile
+      tags:
+      - Authentication
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get a new pair of access and refresh tokens.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: token
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tokens refreshed
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.GenericResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.TokenResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      summary: Refresh token
       tags:
       - Authentication
   /health:
