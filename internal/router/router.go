@@ -17,6 +17,8 @@ func SetupRouter(dbClient *db.PrismaClient) *gin.Engine {
 	// Inisialisasi Service dan Handler
 	authService := service.NewAuthService(dbClient)
 	authHandler := handler.NewAuthHandler(authService)
+	userService := service.NewUserService(dbClient)
+	userHandler := handler.NewUserHandler(userService)
 
 	router := gin.Default()
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -32,6 +34,16 @@ func SetupRouter(dbClient *db.PrismaClient) *gin.Engine {
 			auth.POST("/refresh", authHandler.RefreshToken) 
 			auth.GET("/profile", middleware.Authenticate(dbClient), authHandler.GetProfile)
 			auth.PUT("/change-password", middleware.Authenticate(dbClient), authHandler.ChangePassword)
+		}
+		users := v1.Group("/users")
+		// Lindungi semua rute di grup ini dengan otentikasi DAN otorisasi admin
+		users.Use(middleware.Authenticate(dbClient), middleware.Authorize("admin"))
+		{
+			users.GET("", userHandler.GetUsers) // URL: /api/v1/users
+			users.POST("", userHandler.CreateUser) // URL: /api/v1/users
+			users.GET("/:id", userHandler.GetUserByID)
+			users.PUT("/:id", userHandler.UpdateUser)
+			users.DELETE("/:id", userHandler.DeleteUser)
 		}
 	}
 

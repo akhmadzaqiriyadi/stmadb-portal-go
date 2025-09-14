@@ -13,6 +13,29 @@ definitions:
     - currentPassword
     - newPassword
     type: object
+  handler.CreateUserRequest:
+    properties:
+      password:
+        example: newpassword123
+        minLength: 6
+        type: string
+      role:
+        enum:
+        - admin
+        - teacher
+        - student
+        - staff
+        example: student
+        type: string
+      username:
+        example: newuser
+        minLength: 3
+        type: string
+    required:
+    - password
+    - role
+    - username
+    type: object
   handler.GenericResponse:
     properties:
       data: {}
@@ -79,6 +102,21 @@ definitions:
         type: string
       refreshToken:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  handler.UpdateUserRequest:
+    properties:
+      is_active:
+        description: Pointer agar bisa membedakan antara nilai `false` dan tidak diisi
+          sama sekali.
+        type: boolean
+      role:
+        enum:
+        - admin
+        - teacher
+        - student
+        - staff
+        example: teacher
         type: string
     type: object
 host: localhost:3000
@@ -221,6 +259,169 @@ paths:
       summary: Show the status of server
       tags:
       - Health Check
+  /users:
+    get:
+      description: Retrieves a list of all users. Only accessible by admins.
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: limit
+        type: integer
+      - description: Search by username
+        in: query
+        name: search
+        type: string
+      - description: Filter by role (admin, teacher, student, staff)
+        in: query
+        name: role
+        type: string
+      - description: Filter by active status (true/false)
+        in: query
+        name: is_active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of users
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all users with filters and pagination
+      tags:
+      - Users
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account. Only accessible by admins.
+      parameters:
+      - description: New User Data
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.GenericResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.ProfileData'
+              type: object
+        "400":
+          description: Invalid request body or username exists
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new user
+      tags:
+      - Users
+  /users/{id}:
+    delete:
+      description: Deletes a user account.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User deleted successfully
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a user
+      tags:
+      - Users
+    get:
+      description: Retrieves details of a single user.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User details
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.GenericResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.ProfileData'
+              type: object
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a single user by ID
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Updates a user's role or active status.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User Update Data
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.GenericResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.ProfileData'
+              type: object
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handler.GenericResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a user
+      tags:
+      - Users
 securityDefinitions:
   BearerAuth:
     in: header

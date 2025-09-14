@@ -74,3 +74,30 @@ func Authenticate(dbClient *db.PrismaClient) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// Authorize adalah middleware untuk memeriksa peran pengguna.
+func Authorize(allowedRoles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userCtx, exists := c.Get("user")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+			return
+		}
+
+		user := userCtx.(*db.UserModel)
+		isAllowed := false
+		for _, role := range allowedRoles {
+			if string(user.Role) == role {
+				isAllowed = true
+				break
+			}
+		}
+
+		if !isAllowed {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "You do not have permission to access this resource"})
+			return
+		}
+
+		c.Next()
+	}
+}

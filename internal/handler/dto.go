@@ -46,3 +46,26 @@ type ProfileResponse struct {
 	Message string      `json:"message" example:"Profile retrieved successfully"`
 	Data    ProfileData `json:"data"`
 }
+
+// CreateUserRequest adalah struktur untuk membuat pengguna baru.
+type CreateUserRequest struct {
+	Username string `json:"username" binding:"required,min=3" example:"newuser"`
+	Password string `json:"password" binding:"required,min=6" example:"newpassword123"`
+	Role     string `json:"role" binding:"required,oneof=admin teacher student staff" example:"student"`
+}
+
+// UpdateUserRequest adalah struktur untuk memperbarui pengguna.
+type UpdateUserRequest struct {
+	// Pointer agar bisa membedakan antara nilai `false` dan tidak diisi sama sekali.
+	IsActive *bool  `json:"is_active" binding:"omitempty"`
+	Role     string `json:"role" binding:"omitempty,oneof=admin teacher student staff" example:"teacher"`
+}
+
+// UserQueryFilters adalah struktur untuk menampung parameter query saat mengambil daftar user.
+type UserQueryFilters struct {
+	Page     int    `form:"page"`
+	Limit    int    `form:"limit"`
+	Search   string `form:"search"`
+	Role     string `form:"role"`
+	IsActive string `form:"is_active"` // String agar bisa handle 'true'/'false' dari query
+}
